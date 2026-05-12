@@ -95,3 +95,8 @@ export function upsertRostersFromGame(game: {
     upsertPlayersForTeam(game.awayTeam.name, game.awayTeam.players || []);
   }
 }
+
+export function clearAllPlayers() {
+  const db = getDb();
+  db.prepare("DELETE FROM players").run();
+}
