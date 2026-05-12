@@ -169,7 +169,7 @@ export const useGameStore = create<GameStore>()(
       setHomeTeam: (team) =>
         set((state) =>
           withLegacyState(state, {
-            awayTeam: { ...state.awayTeam, isHome: team === "away" },
+            awayTeam: { ...state.awayTeam, isHome: false },
             homeTeam: { ...state.homeTeam, isHome: team === "home" },
           }),
         ),
