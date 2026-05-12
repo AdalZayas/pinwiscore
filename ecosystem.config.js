@@ -3,6 +3,7 @@ module.exports = {
     {
       name: "pinwiscore",
       script: ".next/standalone/server.js",
+      node_args: "--experimental-sqlite",
       cwd: "/home/aszyh/dev/pinwiscore",
       instances: 1,
       exec_mode: "fork",
