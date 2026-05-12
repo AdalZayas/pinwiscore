@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: "pinwiscore",
-      script: ".next/standalone/server.js",
-      node_args: "--experimental-sqlite",
+      script: "npm",
+      args: "start",
       cwd: "/home/aszyh/dev/pinwiscore",
       instances: 1,
       exec_mode: "fork",
