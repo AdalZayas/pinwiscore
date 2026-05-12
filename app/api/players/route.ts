@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getPlayersForTeam, upsertPlayersForTeam } from "@/lib/roster-db";
+import {
+  getPlayersForTeam,
+  upsertPlayersForTeam,
+  deletePlayerFromTeam,
+  deleteAllPlayersForTeam,
+} from "@/lib/roster-db";
 import type { Player } from "@/lib/types";
 
 export async function GET(request: Request) {
@@ -33,4 +38,37 @@ export async function POST(request: Request) {
   upsertPlayersForTeam(teamName, players);
 
   return NextResponse.json({ ok: true, count: players.length });
+}
+
+export async function DELETE(request: Request) {
+  const body = (await request.json()) as {
+    teamName?: string;
+    playerName?: string;
+    deleteAll?: boolean;
+  };
+
+  const teamName = body.teamName?.trim();
+
+  if (!teamName) {
+    return NextResponse.json(
+      { error: "Team name is required" },
+      { status: 400 },
+    );
+  }
+
+  if (body.deleteAll) {
+    deleteAllPlayersForTeam(teamName);
+    return NextResponse.json({ ok: true, message: "All players deleted" });
+  }
+
+  if (!body.playerName?.trim()) {
+    return NextResponse.json(
+      { error: "Player name is required for single delete" },
+      { status: 400 },
+    );
+  }
+
+  deletePlayerFromTeam(teamName, body.playerName);
+
+  return NextResponse.json({ ok: true, message: "Player deleted" });
 }

@@ -52,6 +52,10 @@ interface GameStore extends GameState {
   recordFoul: () => void;
   recordOut: (outType?: OutType, fieldingPositions?: PositionNumber[]) => void;
   recordHit: (hitType: HitType) => void;
+  recordHitWithCustomRunners: (
+    hitType: HitType,
+    runnersNotAdvancing: string[],
+  ) => void;
   recordWalk: () => void;
   recordHitByPitch: () => void;
   recordError: (position?: PositionNumber) => void;
@@ -139,12 +143,24 @@ function withLegacyState<
     Partial<LegacyStoreFields> &
     Partial<ThemeStoreFields>,
 >(state: GameState, updates: T): T & ReturnType<typeof createLegacyState> {
+  const legacyState = createLegacyState({
+    ...state,
+    ...updates,
+  });
+
+  // Preserve showBatterTransition and nextBatterName if explicitly set in updates
+  const hasExplicitTransition = "showBatterTransition" in updates;
+  const hasExplicitNextBatter = "nextBatterName" in updates;
+
   return {
     ...updates,
-    ...createLegacyState({
-      ...state,
-      ...updates,
-    }),
+    ...legacyState,
+    ...(hasExplicitTransition
+      ? { showBatterTransition: updates.showBatterTransition }
+      : {}),
+    ...(hasExplicitNextBatter
+      ? { nextBatterName: updates.nextBatterName }
+      : {}),
   };
 }
 
@@ -373,12 +389,25 @@ export const useGameStore = create<GameStore>()(
               newRunners.push({ playerId: batter.id, base: "first" });
             }
 
+            // Advance to next batter
+            const battingTeam = state.isTopInning ? "away" : "home";
+            const teamPlayers = state.isTopInning
+              ? state.awayTeam.players
+              : state.homeTeam.players;
+            const nextIndex =
+              (state.currentBatterIndex[battingTeam] + 1) % teamPlayers.length;
+            const nextBatter = teamPlayers[nextIndex];
+
             const baseState = {
               outs: newOuts,
               balls: 0,
               strikes: 0,
               runners: newRunners,
               plays: [...state.plays, play],
+              currentBatterIndex: {
+                ...state.currentBatterIndex,
+                [battingTeam]: nextIndex,
+              },
             };
 
             if (newOuts >= 3) {
@@ -388,35 +417,11 @@ export const useGameStore = create<GameStore>()(
               );
             }
 
-            const battingTeam = state.isTopInning ? "away" : "home";
-            const teamPlayers = state.isTopInning
-              ? state.awayTeam.players
-              : state.homeTeam.players;
-            const nextIndex =
-              (state.currentBatterIndex[battingTeam] + 1) % teamPlayers.length;
-
-            const nextBatter = teamPlayers[nextIndex];
-
             return withLegacyState(state, {
               ...baseState,
-              currentBatterIndex: {
-                ...state.currentBatterIndex,
-                [battingTeam]: nextIndex,
-              },
               showBatterTransition: !!nextBatter,
               nextBatterName: nextBatter?.name || "",
             });
-          }
-
-          const baseState = {
-            outs: newOuts,
-            balls: 0,
-            strikes: 0,
-            plays: [...state.plays, play],
-          };
-
-          if (newOuts >= 3) {
-            return withLegacyState(state, handleInningChange(state, baseState));
           }
 
           // Advance to next batter
@@ -428,12 +433,23 @@ export const useGameStore = create<GameStore>()(
             (state.currentBatterIndex[battingTeam] + 1) % teamPlayers.length;
           const nextBatter = teamPlayers[nextIndex];
 
-          return withLegacyState(state, {
-            ...baseState,
+          const baseState = {
+            outs: newOuts,
+            balls: 0,
+            strikes: 0,
+            plays: [...state.plays, play],
             currentBatterIndex: {
               ...state.currentBatterIndex,
               [battingTeam]: nextIndex,
             },
+          };
+
+          if (newOuts >= 3) {
+            return withLegacyState(state, handleInningChange(state, baseState));
+          }
+
+          return withLegacyState(state, {
+            ...baseState,
             showBatterTransition: !!nextBatter,
             nextBatterName: nextBatter?.name || "",
           });
@@ -458,6 +474,100 @@ export const useGameStore = create<GameStore>()(
             newRunners = advanceRunners(newRunners, advances, (runs) => {
               runsScored += runs;
             });
+
+            // Place batter on appropriate base
+            if (batter) {
+              const newBase: Base =
+                hitType === "single"
+                  ? "first"
+                  : hitType === "double"
+                    ? "second"
+                    : "third";
+              newRunners.push({ playerId: batter.id, base: newBase });
+            }
+          }
+
+          // Update inning score
+          const inningScores = [...state.inningScores];
+          const inningIndex = state.currentInning - 1;
+          if (inningScores[inningIndex]) {
+            const scoreKey = state.isTopInning ? "away" : "home";
+            inningScores[inningIndex] = {
+              ...inningScores[inningIndex],
+              [scoreKey]: inningScores[inningIndex][scoreKey] + runsScored,
+            };
+          }
+          const scoreAfter = getScoreAfterFromInnings(inningScores);
+
+          // Advance to next batter
+          const battingTeam = state.isTopInning ? "away" : "home";
+          const teamPlayers = state.isTopInning
+            ? state.awayTeam.players
+            : state.homeTeam.players;
+          const nextIndex =
+            (state.currentBatterIndex[battingTeam] + 1) % teamPlayers.length;
+          const nextBatter = teamPlayers[nextIndex];
+
+          return withLegacyState(state, {
+            balls: 0,
+            strikes: 0,
+            runners: newRunners,
+            inningScores,
+            plays: [
+              ...state.plays,
+              { ...play, rbiCount: runsScored, scoreAfter },
+            ],
+            currentBatterIndex: {
+              ...state.currentBatterIndex,
+              [battingTeam]: nextIndex,
+            },
+            showBatterTransition: !!nextBatter,
+            nextBatterName: nextBatter?.name || "",
+          });
+        }),
+
+      recordHitWithCustomRunners: (hitType, runnersNotAdvancing) =>
+        set((state) => {
+          const play = createPlay(state, hitType as PlayResult, { hitType });
+          const batter = get().getCurrentBatter();
+
+          let newRunners = [...state.runners];
+          let runsScored = 0;
+
+          // Advance runners based on hit type
+          if (hitType === "home-run") {
+            runsScored = newRunners.length + 1; // All runners plus batter
+            newRunners = [];
+          } else {
+            // Move runners, but keep those in runnersNotAdvancing on their current bases
+            const notAdvancingSet = new Set(runnersNotAdvancing);
+            const advances =
+              hitType === "single" ? 1 : hitType === "double" ? 2 : 3;
+
+            newRunners = newRunners
+              .map((runner) => {
+                // If this runner should not advance, keep them on their current base
+                if (notAdvancingSet.has(runner.playerId)) {
+                  return runner;
+                }
+
+                const baseOrder: (Base | "home")[] = [
+                  "first",
+                  "second",
+                  "third",
+                  "home",
+                ];
+                const currentIndex = baseOrder.indexOf(runner.base);
+                const newIndex = currentIndex + advances;
+
+                if (newIndex >= 3) {
+                  runsScored++;
+                  return null;
+                }
+
+                return { ...runner, base: baseOrder[newIndex] as Base };
+              })
+              .filter((r): r is Runner => r !== null);
 
             // Place batter on appropriate base
             if (batter) {
@@ -1205,6 +1315,10 @@ function handleInningChange(
 
     return {
       ...updates,
+      currentBatterIndex: {
+        ...(updates.currentBatterIndex || state.currentBatterIndex),
+        [opponentTeamKey]: 0,
+      },
       totalInnings: nextTotalInnings,
       currentInning: isGameOver ? state.currentInning : nextOpponentInning,
       isTopInning: myTeamIsHome,
@@ -1219,23 +1333,43 @@ function handleInningChange(
   }
 
   if (state.isTopInning) {
+    // Switch to bottom of inning
+    const nextBattingTeam = myTeamIsHome ? "home" : "away";
+    const teamPlayers = myTeamIsHome
+      ? state.homeTeam.players
+      : state.awayTeam.players;
+    const firstBatter = teamPlayers[0];
+
     return {
       ...updates,
+      currentBatterIndex: {
+        ...(updates.currentBatterIndex || state.currentBatterIndex),
+        [nextBattingTeam]: 0,
+      },
       isTopInning: false,
       outs: 0,
       balls: 0,
       strikes: 0,
       runners: [],
-      showBatterTransition: false,
-      nextBatterName: "",
+      showBatterTransition: !!firstBatter,
+      nextBatterName: firstBatter?.name || "",
     };
   } else {
     // Switch to top of next inning
     const nextInning = state.currentInning + 1;
     const isGameOver = nextInning > state.totalInnings;
+    const nextBattingTeam = myTeamIsHome ? "away" : "home";
+    const teamPlayers = myTeamIsHome
+      ? state.awayTeam.players
+      : state.homeTeam.players;
+    const firstBatter = teamPlayers[0];
 
     return {
       ...updates,
+      currentBatterIndex: {
+        ...(updates.currentBatterIndex || state.currentBatterIndex),
+        [nextBattingTeam]: 0,
+      },
       currentInning: isGameOver ? state.currentInning : nextInning,
       isTopInning: true,
       outs: 0,
@@ -1243,8 +1377,8 @@ function handleInningChange(
       strikes: 0,
       runners: [],
       status: isGameOver ? "finished" : "in-progress",
-      showBatterTransition: false,
-      nextBatterName: "",
+      showBatterTransition: !!firstBatter,
+      nextBatterName: firstBatter?.name || "",
     };
   }
 }

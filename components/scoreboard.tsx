@@ -73,7 +73,7 @@ export function Scoreboard() {
               </div>
             </td>
             {displayInnings.map((inning, i) => {
-              const score = inning[opponentTeamKey];
+              const score = inning["away"];
               const showScore =
                 status === "finished" ||
                 currentInning > i + 1 ||
@@ -116,7 +116,7 @@ export function Scoreboard() {
               </div>
             </td>
             {displayInnings.map((inning, i) => {
-              const score = inning[myTeamKey];
+              const score = inning["home"];
               const showScore = status === "finished" || currentInning > i + 1;
               const isCurrent = currentInning === i + 1 && !isTopInning;
 

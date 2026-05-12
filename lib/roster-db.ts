@@ -105,3 +105,21 @@ export function clearAllPlayers() {
   const db = getDb();
   db.prepare("DELETE FROM players").run();
 }
+
+export function deletePlayerFromTeam(teamName: string, playerName: string) {
+  if (!teamName.trim() || !playerName.trim()) return;
+
+  const db = getDb();
+  const playerKey = makePlayerKey(teamName, { name: playerName } as Player);
+
+  db.prepare("DELETE FROM players WHERE player_key = ?").run(playerKey);
+}
+
+export function deleteAllPlayersForTeam(teamName: string) {
+  if (!teamName.trim()) return;
+
+  const db = getDb();
+  db.prepare("DELETE FROM players WHERE lower(team_name) = lower(?)").run(
+    teamName.trim(),
+  );
+}

@@ -34,6 +34,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { SavedGames } from "./saved-games";
 import { SettingsView } from "./settings-view";
 import { ChevronDown, Plus, Settings2, Trash2, Users } from "lucide-react";
@@ -245,6 +256,70 @@ export function GameSetup() {
     );
   };
 
+  const deleteSavedPlayer = async (playerToDelete: Player) => {
+    if (!teamNameKey) return;
+
+    try {
+      // Remove the player from savedPlayers in memory
+      const updatedSavedPlayers = savedPlayers.filter(
+        (p) => playerKey(p) !== playerKey(playerToDelete),
+      );
+      setSavedPlayers(updatedSavedPlayers);
+
+      // Call API to delete the player
+      await fetch("/api/players", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamName: teamNameKey,
+          playerName: playerToDelete.name,
+        }),
+      });
+
+      toast({
+        title: "Player deleted",
+        description: `${playerToDelete.name} has been removed from your saved roster.`,
+      });
+    } catch (err) {
+      console.error("Error deleting player:", err);
+      toast({
+        variant: "destructive",
+        title: "Error deleting player",
+        description: "Please try again.",
+      });
+    }
+  };
+
+  const deleteAllSavedPlayers = async () => {
+    if (!teamNameKey || savedPlayers.length === 0) return;
+
+    try {
+      setSavedPlayers([]);
+
+      // Call API to delete all players for the team
+      await fetch("/api/players", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamName: teamNameKey,
+          deleteAll: true,
+        }),
+      });
+
+      toast({
+        title: "All players deleted",
+        description: "All saved players have been removed from your roster.",
+      });
+    } catch (err) {
+      console.error("Error deleting all players:", err);
+      toast({
+        variant: "destructive",
+        title: "Error deleting players",
+        description: "Please try again.",
+      });
+    }
+  };
+
   const loadSampleTeam = () => {
     const sample = samplePlayers.pinwinos.map((player) => ({
       ...player,
@@ -441,31 +516,87 @@ export function GameSetup() {
                   No available saved players to add.
                 </p>
               ) : (
-                <div className="flex gap-2">
-                  <Select
-                    value={selectedSavedPlayerKey}
-                    onValueChange={setSelectedSavedPlayerKey}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Select a player" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableSavedPlayers.map((player) => (
-                        <SelectItem
-                          key={playerKey(player)}
-                          value={playerKey(player)}
-                        >
-                          {formatSavedPlayerLabel(player)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    onClick={addSelectedSavedPlayer}
-                    disabled={!selectedSavedPlayerKey}
-                  >
-                    Add
-                  </Button>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Select
+                      value={selectedSavedPlayerKey}
+                      onValueChange={setSelectedSavedPlayerKey}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select a player" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableSavedPlayers.map((player) => (
+                          <SelectItem
+                            key={playerKey(player)}
+                            value={playerKey(player)}
+                          >
+                            {formatSavedPlayerLabel(player)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      onClick={addSelectedSavedPlayer}
+                      disabled={!selectedSavedPlayerKey}
+                    >
+                      Add
+                    </Button>
+                    {selectedSavedPlayerKey && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="h-10 w-10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Delete player from saved?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete this player from your
+                              saved roster.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => {
+                                const selectedPlayer =
+                                  availableSavedPlayers.find(
+                                    (p) =>
+                                      playerKey(p) === selectedSavedPlayerKey,
+                                  );
+                                if (selectedPlayer) {
+                                  deleteSavedPlayer(selectedPlayer);
+                                  setSelectedSavedPlayerKey("");
+                                }
+                              }}
+                              className="bg-destructive hover:bg-destructive/90"
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </div>
+                  {savedPlayers.length > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={deleteAllSavedPlayers}
+                      className="w-full"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete All {savedPlayers.length} Saved Players
+                    </Button>
+                  )}
                 </div>
               )}
 

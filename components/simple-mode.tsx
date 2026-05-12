@@ -24,9 +24,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Undo2, ArrowRight, Check, X } from "lucide-react";
-import { Runner, Base } from "@/lib/types";
+import { Runner, Base, HitType } from "@/lib/types";
 
 export function SimpleMode() {
   const {
@@ -44,6 +46,7 @@ export function SimpleMode() {
     recordFoul,
     recordOut,
     recordHit,
+    recordHitWithCustomRunners,
     recordWalk,
     recordHitByPitch,
     recordError,
@@ -56,6 +59,10 @@ export function SimpleMode() {
 
   const [stealingRunner, setStealingRunner] = useState<Runner | null>(null);
   const [stealToBase, setStealToBase] = useState<Base | null>(null);
+  const [pendingHit, setPendingHit] = useState<HitType | null>(null);
+  const [runnersNotAdvancing, setRunnersNotAdvancing] = useState<Set<string>>(
+    new Set(),
+  );
 
   const currentBatter = getCurrentBatter();
 
@@ -73,6 +80,47 @@ export function SimpleMode() {
     } else {
       recordBall();
     }
+  };
+
+  const handleHitClick = (hitType: HitType) => {
+    // If there are runners, show dialog to select which shouldn't advance
+    if (runners.length > 0) {
+      setPendingHit(hitType);
+      setRunnersNotAdvancing(new Set());
+    } else {
+      recordHit(hitType);
+    }
+  };
+
+  const handleConfirmHit = () => {
+    if (!pendingHit) return;
+
+    if (runnersNotAdvancing.size === 0) {
+      recordHit(pendingHit);
+    } else {
+      recordHitWithCustomRunners(pendingHit, Array.from(runnersNotAdvancing));
+    }
+
+    setPendingHit(null);
+    setRunnersNotAdvancing(new Set());
+  };
+
+  const toggleRunnerAdvancement = (runnerId: string) => {
+    const newSet = new Set(runnersNotAdvancing);
+    if (newSet.has(runnerId)) {
+      newSet.delete(runnerId);
+    } else {
+      newSet.add(runnerId);
+    }
+    setRunnersNotAdvancing(newSet);
+  };
+
+  const getPlayerName = (playerId: string) => {
+    return myTeam.players.find((p) => p.id === playerId)?.name || "Unknown";
+  };
+
+  const getBaseLabel = (base: Base) => {
+    return base === "first" ? "1B" : base === "second" ? "2B" : "3B";
   };
 
   const handleStealAttempt = (runner: Runner) => {
@@ -216,27 +264,27 @@ export function SimpleMode() {
             <Button
               variant="secondary"
               className="h-12 font-semibold"
-              onClick={() => recordHit("single")}
+              onClick={() => handleHitClick("single")}
             >
               1B
             </Button>
             <Button
               variant="secondary"
               className="h-12 font-semibold"
-              onClick={() => recordHit("double")}
+              onClick={() => handleHitClick("double")}
             >
               2B
             </Button>
             <Button
               variant="secondary"
               className="h-12 font-semibold"
-              onClick={() => recordHit("triple")}
+              onClick={() => handleHitClick("triple")}
             >
               3B
             </Button>
             <Button
               className="h-12 font-semibold bg-primary hover:bg-primary/90"
-              onClick={() => recordHit("home-run")}
+              onClick={() => handleHitClick("home-run")}
             >
               HR
             </Button>
@@ -478,6 +526,58 @@ export function SimpleMode() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
+
+      {/* Runner Advancement Dialog */}
+      <Dialog
+        open={!!pendingHit}
+        onOpenChange={(open) => !open && setPendingHit(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Runner Advancement</DialogTitle>
+            <DialogDescription>
+              Select any runners who should NOT advance on this hit:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {runners.map((runner) => (
+              <div
+                key={runner.playerId}
+                className="flex items-center space-x-3 p-3 border rounded-lg"
+              >
+                <Checkbox
+                  id={`runner-${runner.playerId}`}
+                  checked={runnersNotAdvancing.has(runner.playerId)}
+                  onCheckedChange={() =>
+                    toggleRunnerAdvancement(runner.playerId)
+                  }
+                />
+                <Label
+                  htmlFor={`runner-${runner.playerId}`}
+                  className="flex-1 cursor-pointer font-medium"
+                >
+                  {getPlayerName(runner.playerId)} on{" "}
+                  {getBaseLabel(runner.base)}
+                </Label>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPendingHit(null);
+                setRunnersNotAdvancing(new Set());
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmHit}>Confirm Hit</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
