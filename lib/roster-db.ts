@@ -43,9 +43,9 @@ export function upsertPlayersForTeam(teamName: string, players: Player[]) {
       player.id,
       teamName.trim(),
       player.name.trim(),
-      "0",
-      "CF",
-      0,
+      player.jerseyNumber || "0",
+      player.position || "CF",
+      player.battingOrder || 0,
       now,
     );
   }
@@ -60,7 +60,9 @@ export function getPlayersForTeam(teamName: string): Player[] {
       `
       SELECT
         min(player_id) as id,
-        player_name as name
+         player_name as name,
+         jersey_number as jerseyNumber,
+         position
       FROM players
       WHERE lower(team_name) = lower(?)
       GROUP BY lower(player_name), player_name
@@ -70,6 +72,8 @@ export function getPlayersForTeam(teamName: string): Player[] {
     .all(teamName.trim()) as Array<{
     id: string;
     name: string;
+    jerseyNumber: string;
+    position: string;
   }>;
 
   return rows.map((row, index) => {
@@ -77,8 +81,8 @@ export function getPlayersForTeam(teamName: string): Player[] {
     return {
       id: row.id || `${normalizeTeamName(teamName)}::${safeName.toLowerCase()}`,
       name: safeName,
-      jerseyNumber: "0",
-      position: "CF" as PositionAbbrev,
+      jerseyNumber: row.jerseyNumber || "0",
+      position: (row.position || "CF") as PositionAbbrev,
       battingOrder: index + 1,
     };
   });
