@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "@/lib/game-store";
 import {
   Player,
@@ -57,6 +57,7 @@ export function GameSetup() {
   const { toast } = useToast();
 
   const [teamSide, setTeamSide] = useState<"home" | "away">("home");
+  const teamSideRef = useRef<"home" | "away">("home");
   const [teamName, setTeamNameLocal] = useState("Pinwinos");
   const [opponentName, setOpponentName] = useState("Opponent");
   const [players, setPlayersLocal] = useState<Player[]>([]);
@@ -272,12 +273,13 @@ export function GameSetup() {
 
     await savePlayersToRoster(players);
 
-    const opponentSide = teamSide === "home" ? "away" : "home";
+    const selectedTeamSide = teamSideRef.current;
+    const opponentSide = selectedTeamSide === "home" ? "away" : "home";
 
-    setHomeTeam(teamSide);
-    setTeamName(teamSide, teamName.trim());
+    setHomeTeam(selectedTeamSide);
+    setTeamName(selectedTeamSide, teamName.trim());
     setTeamName(opponentSide, opponentName.trim());
-    setPlayers(teamSide, players);
+    setPlayers(selectedTeamSide, players);
     setPlayers(opponentSide, []);
     startGame();
   };
@@ -320,7 +322,9 @@ export function GameSetup() {
                   value={teamSide}
                   onValueChange={(value) => {
                     const side = value as "home" | "away";
+                    teamSideRef.current = side;
                     setTeamSide(side);
+                    setHomeTeam(side);
                   }}
                   className="flex gap-4"
                 >
