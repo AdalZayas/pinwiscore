@@ -132,6 +132,11 @@ export function GameSetup() {
     (player) => !lineupHasPlayer(player),
   );
 
+  const formatSavedPlayerLabel = (player: Player) => {
+    const jersey = player.jerseyNumber?.trim();
+    return jersey ? `${player.name} #${jersey}` : player.name;
+  };
+
   const savePlayersToRoster = async (playersToSave: Player[]) => {
     if (!teamNameKey || playersToSave.length === 0) {
       return;
@@ -446,7 +451,7 @@ export function GameSetup() {
                           key={playerKey(player)}
                           value={playerKey(player)}
                         >
-                          {player.name}
+                          {formatSavedPlayerLabel(player)}
                         </SelectItem>
                       ))}
                     </SelectContent>
